@@ -67,8 +67,15 @@ public:
 	// on some processors since it does not have to check
 	// a sign
 	// global variable can be referred anywhere in the program 
+	// 10_11 added feature mode variable 
 	unsigned int mouse_cursor;
 	unsigned int credits;
+	unsigned int feature_mode;
+        int crossed_line;
+	// For point system 
+	Vec p1;
+	Vec p2;
+
 	Global() {
 		xres = 640;
 		yres = 480;
@@ -79,6 +86,9 @@ public:
 
 		// Credits page is off initially
 		credits = 0;
+		// Feature mode is off initially 
+		feature_mode = 0;
+		crossed_line = 0;
 	}
 } gl;
 
@@ -88,6 +98,9 @@ public:
 	Vec dir;
 	Vec vel;
 	Vec acc;
+
+	// To keep track of previous positions
+	Vec prev_pos;
 	float angle;
 	float color[3];
 public:
@@ -552,6 +565,21 @@ int check_keys(XEvent *e)
 
 
 		case XK_f:
+                        // To make sure that crossed line variable is off
+			gl.crossed_line = 0;
+			//togggle feature mode 
+			gl.feature_mode ^= 1;
+			if (gl.feature_mode == 1) {
+			    gl.p1[0] = rand() % gl.xres;
+			    gl.p1[1] = rand() % gl.yres;
+
+                            gl.p2[0] = rand() % gl.xres;
+			    gl.p2[1] = rand() % gl.yres;
+
+
+
+			}
+
 			break;
 		case XK_s:
 			break;
@@ -621,6 +649,12 @@ void buildAsteroidFragment(Asteroid *ta, Asteroid *a)
 void physics()
 {
 	Flt d0,d1,dist;
+	// Save the previous x and y positions of the ship
+	// so we know if the ship has crossed the random line
+	// graphics consiste of grames, so this may work better than
+	// using two linear functions 
+	g.ship.prev_pos[0] = g.ship.pos[0];
+	g.ship.prev_pos[1] = g.ship.pos[1];
 	//Update ship position
 	g.ship.pos[0] += g.ship.vel[0];
 	g.ship.pos[1] += g.ship.vel[1];
@@ -955,6 +989,123 @@ void render()
 
 	    return;
 	}
+
+	// apply feature mode 
+	if (gl.feature_mode) {
+
+	    // Draw  a border using a triangle strip
+	    // Transparent frames around the screen 
+	    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	    glEnable(GL_BLEND);
+	    glColor3f(1.0, 1.0, 0.0);
+	    glColor4f(1.0, 1.0, 0.0, 0.5);
+	    int w = 20;
+	    glBegin(GL_TRIANGLE_STRIP);
+	    	glVertex2i(0, 0);
+          	glVertex2i(0+w, w);
+
+	    	glVertex2i(0, gl.yres);
+	    	glVertex2i(0+w, gl.yres-w);
+
+	    	glVertex2i(gl.xres, gl.yres);
+		glVertex2i(gl.xres-w, gl.yres-w);
+
+		glVertex2i(gl.xres, 0);
+		glVertex2i(gl.xres-w, w);
+
+		glVertex2i(0, 0);
+		glVertex2i(0+w, w);
+
+	    glEnd();
+	    glDisable(GL_BLEND);
+
+
+	// Creating two points 
+
+	glBegin(GL_QUADS);
+	glColor3f(1.0, 0.0, 0.0);
+	    glVertex2i(gl.p1[0]-5, gl.p1[1]-5);
+
+	    glVertex2i(gl.p1[0]-5, gl.p1[1]+5);
+       
+	    glVertex2i(gl.p1[0]+5, gl.p1[1]-5);
+
+	    glVertex2i(gl.p1[0]+5, gl.p1[1]+5);
+        glEnd();
+
+	glBegin(GL_QUADS);
+	    glVertex2i(gl.p2[0]-5, gl.p2[1]-5);
+
+	    glVertex2i(gl.p2[0]-5, gl.p2[1]+5);
+       
+	    glVertex2i(gl.p2[0]+5, gl.p2[1]-5);
+
+	    glVertex2i(gl.p2[0]+5, gl.p2[1]+5);
+        glEnd();
+
+	glColor3f(1.0, 0.0, 0.0);
+	if (gl.crossed_line) {
+
+	    glColor3f(1.0, 1.0, 1.0);
+	}
+
+	glBegin(GL_LINES);
+	    glVertex2i(gl.p1[0], gl.p1[1]);
+	    glVertex2i(gl.p2[0], gl.p2[1]);
+	glEnd();
+
+	// This activity allows us to learn about vectors 
+	// by thinking about if the ship's position has crossed a random line
+	// By looking for a certain condition, you can detect the ship has crossed
+	// the random line or not
+	// WIth dot product, we can calculate a perpendicular line 
+	// if the dot product is posivie, it is above the random line,
+	// if the dot product is negative, it is below the random line.
+	
+	// These are very classical entities in computer graphics 
+	// Vector vect: Subtract first point from the second point
+	Vec vect = {gl.p2[0] - gl.p1[0], gl.p1[1] - gl.p2[1]};
+
+	// Change x and y and make one of them negative to find the perpendicular 
+	// 
+	Vec perpend = {vect[1], -vect[0]};
+	
+	// vector for  previous position of the ship from the second random point 
+	// is obtianed by subtracting 
+	
+        Vec vship_prev = {g.ship.prev_pos[0] - gl.p2[0],
+                          g.ship.prev_pos[1] - gl.p2[1]};
+
+	// creat vector to the current position of the ship
+	Vec vship_after = {g.ship.pos[0] - gl.p2[0],
+	                   g.ship.pos[1] - gl.p2[1]};
+
+	// Dot product =  (a.x * b.x) + (a.y * b.y)
+	// if the dot product is zero the line between the ship and the second
+	// random positin is aligned with the random line between the two random
+	// positions 
+	double dot1 = perpend[0] * vship_prev[0] + perpend[1] * vship_prev[1];
+	double dot2 = perpend[0] * vship_after[0] + perpend[1] * vship_after[1];
+
+	// The sign of the vector 
+	// if the dot1 is less than zero ->> it is negative, otherwise positive 
+	// if the dot1 is less than zero ->> it is negative, otherwise positive 
+	int sign1 = (dot1 < 0.0) ? -1 : 1;
+	int sign2 = (dot2 < 0.0) ? -1 : 1;
+
+
+	// if the sign is different, then the ship has crossed the line 
+	if (sign1 != sign2) {
+	    gl.crossed_line = 1;
+	    
+	}
+
+
+
+
+	}
+
+
 
 }
 
